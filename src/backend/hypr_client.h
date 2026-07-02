@@ -10,22 +10,6 @@ struct HyprWindow {
   bool isFloating;
 };
 
-struct WindowRule {
-  QString name;
-  QString matchClass;
-  QString matchTitle;
-
-  bool floatEnabled = false;
-
-  bool sizeEnabled = false;
-  int sizeWidth = 0;
-  int sizeHeight = 0;
-
-  bool moveEnabled = false;
-  int moveX = 0;
-  int moveY = 0;
-};
-
 struct ExistingRule {
   QString name;
   QString matchClass;
@@ -41,9 +25,13 @@ public:
 
   QVector<HyprWindow> fetchActiveWindows();
 
-  bool appendWindowRule(const WindowRule &rule);
+  bool writeRulesFile(const QString &path, const QVector<ExistingRule> &rules,
+                      const QString &header = QString());
 
   bool focusWindow(const QString &address);
 
-  QVector<ExistingRule> parseRulesFile(const QString &path);
+  // header receives everything before the first rule block (requires,
+  // local vars, comments) so writes can preserve it.
+  QVector<ExistingRule> parseRulesFile(const QString &path,
+                                       QString *header = nullptr);
 };

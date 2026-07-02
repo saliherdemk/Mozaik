@@ -1,6 +1,5 @@
 #include "hypr_client.h"
 #include <QDebug>
-#include <QDir>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -46,44 +45,52 @@ QVector<HyprWindow> HyprClient::fetchActiveWindows() {
   return windows;
 }
 
-bool HyprClient::appendWindowRule(const WindowRule &rule) {
-  if (rule.name.isEmpty() || rule.matchClass.isEmpty())
-    return false;
+static const QRegularExpression kRuleBlockRe(
+    R"re(hl\.window_rule\(\{(.*?)\}\))re",
+    QRegularExpression::DotMatchesEverythingOption);
 
-  QString path = QDir::homePath() + "/.config/hypr/gui-rules.conf";
+static QString serializeLuaRule(const ExistingRule &rule) {
+  QString s = "hl.window_rule({\n";
+  s += QString("  name = \"%1\",\n").arg(rule.name);
+  if (rule.floatEnabled)
+    s += "  float = true,\n";
+  if (!rule.size.isEmpty())
+    s += QString("  size = \"%1\",\n").arg(rule.size);
+  if (!rule.move.isEmpty())
+    s += QString("  move = \"%1\",\n").arg(rule.move);
+  // class/title hold raw Lua expressions (may be vars.* or ".." concats),
+  // so they are written back verbatim, never re-quoted.
+  if (rule.matchTitle.isEmpty())
+    s += QString("  match = { class = %1 },\n").arg(rule.matchClass);
+  else
+    s += QString("  match = { class = %1, title = %2 },\n")
+             .arg(rule.matchClass, rule.matchTitle);
+  s += "})";
+  return s;
+}
+
+bool HyprClient::writeRulesFile(const QString &path,
+                                const QVector<ExistingRule> &rules,
+                                const QString &header) {
   QFile file(path);
-
-  if (!file.open(QIODevice::Append | QIODevice::Text)) {
+  if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
     qWarning() << "Could not open rules file for writing:" << path;
     return false;
   }
 
   QTextStream out(&file);
-  out << "windowrule {\n";
-  out << "  name = " << rule.name << "\n";
-
-  if (rule.floatEnabled)
-    out << "  float = on\n";
-
-  if (rule.sizeEnabled)
-    out << "  size = " << rule.sizeWidth << " " << rule.sizeHeight << "\n";
-
-  if (rule.moveEnabled)
-    out << "  move = " << rule.moveX << " " << rule.moveY << "\n";
-
-  out << "  match:class = " << rule.matchClass << "\n";
-
-  if (!rule.matchTitle.isEmpty())
-    out << "  match:title = " << rule.matchTitle << "\n";
-
-  out << "}\n\n";
+  if (!header.trimmed().isEmpty())
+    out << header.trimmed() << "\n\n";
+  for (const ExistingRule &rule : rules)
+    out << serializeLuaRule(rule) << "\n\n";
   file.close();
 
   QProcess::startDetached("hyprctl", QStringList() << "reload");
   return true;
 }
 
-QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path) {
+QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
+                                                 QString *header) {
   QVector<ExistingRule> rules;
 
   QFile file(path);
@@ -95,9 +102,11 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path) {
   QString content = QTextStream(&file).readAll();
   file.close();
 
-  static const QRegularExpression blockRe(
-      R"re(hl\.window_rule\(\{(.*?)\}\))re",
-      QRegularExpression::DotMatchesEverythingOption);
+  if (header) {
+    QRegularExpressionMatch first = kRuleBlockRe.match(content);
+    *header = first.hasMatch() ? content.left(first.capturedStart(0)) : content;
+  }
+
   static const QRegularExpression matchRe(
       R"re(match\s*=\s*\{(.*?)\})re",
       QRegularExpression::DotMatchesEverythingOption);
@@ -108,15 +117,7 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path) {
   static const QRegularExpression sizeRe(R"re(size\s*=\s*"([^"]*)")re");
   static const QRegularExpression moveRe(R"re(move\s*=\s*"([^"]*)")re");
 
-  auto stripIfQuoted = [](QString s) {
-    s = s.trimmed();
-    if (s.length() >= 2 && s.startsWith('"') && s.endsWith('"') &&
-        s.count('"') == 2)
-      return s.mid(1, s.length() - 2);
-    return s;
-  };
-
-  QRegularExpressionMatchIterator blockIt = blockRe.globalMatch(content);
+  QRegularExpressionMatchIterator blockIt = kRuleBlockRe.globalMatch(content);
   while (blockIt.hasNext()) {
     QString block = blockIt.next().captured(1);
 
@@ -132,9 +133,9 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path) {
 
       QRegularExpressionMatch fieldsMatch = classFieldRe.match(matchBlock);
       if (fieldsMatch.hasMatch()) {
-        rule.matchClass = stripIfQuoted(fieldsMatch.captured(1));
+        rule.matchClass = fieldsMatch.captured(1).trimmed();
         if (!fieldsMatch.captured(2).isEmpty())
-          rule.matchTitle = stripIfQuoted(fieldsMatch.captured(2));
+          rule.matchTitle = fieldsMatch.captured(2).trimmed();
       }
     }
 

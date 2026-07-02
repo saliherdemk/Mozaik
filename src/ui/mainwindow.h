@@ -20,10 +20,16 @@ private slots:
   void refreshWindowList();
   void applySelectedRule();
   void populateFormFromSelection();
+  void populateFormFromRuleSelection();
   void browseConfigFile();
+  void restoreOldConfig();
 
 private:
   HyprClient m_hyprClient;
+  QVector<ExistingRule> m_loadedRules;
+  QString m_configFilePath;
+  QString m_configHeader;
+  int m_editingRuleIndex = -1;
 
   QLabel *m_configFileLabel;
   QPushButton *m_browseButton;
@@ -52,4 +58,6 @@ private:
 
   void setupUi();
   void loadRulesFromFile(const QString &path);
+  void refreshRulesTable();
+  void closeRuleForm();
 };
