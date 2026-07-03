@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install deps
+        run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base git
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Package
+        run: tar -czf Mozaik-${{ github.ref_name }}-x86_64.tar.gz -C build Mozaik
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Mozaik-*.tar.gz
+          generate_release_notes: true
+
+  aur:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set pkgver from tag
+        run: sed -i "s/^pkgver=.*/pkgver=${GITHUB_REF_NAME#v}/" PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v4.1.1
+        with:
+          pkgname: mozaik
+          pkgbuild: ./PKGBUILD
+          updpkgsums: true
+          commit_username: saliherdemk
+          commit_email: saliherdem_kaymak@hotmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: ${{ github.ref_name }}
