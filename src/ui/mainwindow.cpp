@@ -10,6 +10,8 @@
 #include <QLabel>
 #include <QMessageBox>
 #include <QProcess>
+#include <QPushButton>
+#include <QTabWidget>
 #include <QVBoxLayout>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
@@ -19,10 +21,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   setupUi();
   refreshWindowList();
 
-  QString defaultPath =
+  m_configFilePath =
       QDir::homePath() + "/.config/hypr/modules/windowrules.lua";
-  if (QFile::exists(defaultPath))
-    loadRulesFromFile(defaultPath);
+  if (QFile::exists(m_configFilePath))
+    loadRulesFromFile(m_configFilePath);
+}
+
+QString MainWindow::backupPath() const {
+  QFileInfo fi(m_configFilePath);
+  return fi.path() + "/" + fi.completeBaseName() + "_old.lua";
 }
 
 void MainWindow::setupUi() {
@@ -31,9 +38,9 @@ void MainWindow::setupUi() {
   QHBoxLayout *controlsLayout = new QHBoxLayout();
 
   QHBoxLayout *browseLayout = new QHBoxLayout();
-  m_browseButton = new QPushButton("Browse windowrules.lua", this);
+  QPushButton *browseButton = new QPushButton("Browse windowrules.lua", this);
   m_configFileLabel = new QLabel("No file selected", this);
-  browseLayout->addWidget(m_browseButton);
+  browseLayout->addWidget(browseButton);
   browseLayout->addWidget(m_configFileLabel, 1);
 
   m_rulesTableWidget = new QTableWidget(this);
@@ -58,7 +65,7 @@ void MainWindow::setupUi() {
   m_tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
   m_tableWidget->verticalHeader()->setVisible(false);
 
-  m_formGroup = new QGroupBox("Rule", this);
+  m_formGroup = new QGroupBox(this);
   QVBoxLayout *formGroupLayout = new QVBoxLayout(m_formGroup);
 
   QHBoxLayout *formHeaderLayout = new QHBoxLayout();
@@ -132,45 +139,115 @@ void MainWindow::setupUi() {
   connect(m_moveCheckBox, &QCheckBox::toggled, m_moveYSpin,
           &QSpinBox::setEnabled);
 
-  m_refreshButton = new QPushButton("Refresh List", this);
+  QPushButton *refreshButton = new QPushButton("Refresh List", this);
   QPushButton *restoreButton = new QPushButton("Restore Old", this);
-  m_applyButton = new QPushButton("Apply Rule", this);
+  QPushButton *applyButton = new QPushButton("Apply Rule", this);
 
-  controlsLayout->addWidget(m_refreshButton);
+  controlsLayout->addWidget(refreshButton);
   controlsLayout->addWidget(restoreButton);
   controlsLayout->addStretch();
-  controlsLayout->addWidget(m_applyButton);
+  controlsLayout->addWidget(applyButton);
+  restoreButton->setVisible(false); // starts on the Active Windows tab
 
   m_formGroup->setVisible(false);
 
-  mainLayout->addLayout(browseLayout);
-  mainLayout->addWidget(m_rulesTableWidget, 1);
-  mainLayout->addWidget(m_tableWidget, 2);
+  QTabWidget *tabs = new QTabWidget(this);
+  tabs->addTab(m_tableWidget, "Active Windows");
+
+  QWidget *savedTab = new QWidget(this);
+  QVBoxLayout *savedLayout = new QVBoxLayout(savedTab);
+  savedLayout->addLayout(browseLayout);
+  savedLayout->addWidget(m_rulesTableWidget);
+  tabs->addTab(savedTab, "Saved Rules");
+
+  mainLayout->addWidget(tabs, 1);
   mainLayout->addWidget(m_formGroup);
   mainLayout->addLayout(controlsLayout);
 
   setCentralWidget(centralWidget);
 
-  connect(m_refreshButton, &QPushButton::clicked, this,
+  connect(refreshButton, &QPushButton::clicked, this,
           &MainWindow::refreshWindowList);
-  connect(m_applyButton, &QPushButton::clicked, this,
+  // Refresh belongs to the Active Windows tab, Restore to Saved Rules.
+  connect(tabs, &QTabWidget::currentChanged, this,
+          [refreshButton, restoreButton](int index) {
+            refreshButton->setVisible(index == 0);
+            restoreButton->setVisible(index == 1);
+          });
+  connect(applyButton, &QPushButton::clicked, this,
           &MainWindow::applySelectedRule);
   connect(m_tableWidget, &QTableWidget::itemSelectionChanged, this,
           &MainWindow::populateFormFromSelection);
   connect(m_rulesTableWidget, &QTableWidget::itemSelectionChanged, this,
           &MainWindow::populateFormFromRuleSelection);
-  connect(m_browseButton, &QPushButton::clicked, this,
+  connect(browseButton, &QPushButton::clicked, this,
           &MainWindow::browseConfigFile);
   connect(restoreButton, &QPushButton::clicked, this,
           &MainWindow::restoreOldConfig);
   connect(closeRuleButton, &QPushButton::clicked, this,
           &MainWindow::closeRuleForm);
+
+  // Live-sync form edits into the selected rule and its table row.
+  connect(m_nameEdit, &QLineEdit::textChanged, this,
+          &MainWindow::syncFormToRule);
+  connect(m_matchTitleCheckBox, &QCheckBox::toggled, this,
+          &MainWindow::syncFormToRule);
+  connect(m_floatCheckBox, &QCheckBox::toggled, this,
+          &MainWindow::syncFormToRule);
+  connect(m_sizeCheckBox, &QCheckBox::toggled, this,
+          &MainWindow::syncFormToRule);
+  connect(m_moveCheckBox, &QCheckBox::toggled, this,
+          &MainWindow::syncFormToRule);
+  connect(m_sizeWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this,
+          &MainWindow::syncFormToRule);
+  connect(m_sizeHeightSpin, qOverload<int>(&QSpinBox::valueChanged), this,
+          &MainWindow::syncFormToRule);
+  connect(m_moveXSpin, qOverload<int>(&QSpinBox::valueChanged), this,
+          &MainWindow::syncFormToRule);
+  connect(m_moveYSpin, qOverload<int>(&QSpinBox::valueChanged), this,
+          &MainWindow::syncFormToRule);
+}
+
+ExistingRule MainWindow::ruleFromForm() const {
+  ExistingRule rule;
+  rule.name = m_nameEdit->text();
+  rule.matchClass = m_matchClassEdit->text();
+  rule.matchTitle =
+      m_matchTitleCheckBox->isChecked() ? m_matchTitleEdit->text() : "";
+  rule.floatEnabled = m_floatCheckBox->isChecked();
+  rule.size = m_sizeCheckBox->isChecked()
+                  ? QString("%1 %2")
+                        .arg(m_sizeWidthSpin->value())
+                        .arg(m_sizeHeightSpin->value())
+                  : "";
+  rule.move = m_moveCheckBox->isChecked()
+                  ? QString("%1 %2")
+                        .arg(m_moveXSpin->value())
+                        .arg(m_moveYSpin->value())
+                  : "";
+  return rule;
+}
+
+void MainWindow::syncFormToRule() {
+  if (m_populatingForm || m_editingRuleIndex < 0)
+    return;
+
+  const ExistingRule rule = ruleFromForm();
+  m_loadedRules[m_editingRuleIndex] = rule;
+
+  int i = m_editingRuleIndex;
+  m_rulesTableWidget->item(i, 0)->setText(rule.name);
+  m_rulesTableWidget->item(i, 1)->setText(rule.matchClass);
+  m_rulesTableWidget->item(i, 2)->setText(rule.matchTitle);
+  m_rulesTableWidget->item(i, 3)->setText(rule.floatEnabled ? "Yes" : "No");
+  m_rulesTableWidget->item(i, 4)->setText(rule.size);
+  m_rulesTableWidget->item(i, 5)->setText(rule.move);
 }
 
 void MainWindow::refreshWindowList() {
   m_tableWidget->setRowCount(0);
 
-  QVector<HyprWindow> currentWindows = m_hyprClient.fetchActiveWindows();
+  QVector<HyprWindow> currentWindows = HyprClient::fetchActiveWindows();
 
   for (int i = 0; i < currentWindows.size(); ++i) {
     m_tableWidget->insertRow(i);
@@ -196,20 +273,27 @@ void MainWindow::populateFormFromSelection() {
 
   m_editingRuleIndex = -1;
   m_rulesTableWidget->clearSelection();
-  m_applyButton->setText("Apply Rule");
 
   QTableWidgetItem *classItem = m_tableWidget->item(selectedRow, 0);
   QString wmClass = classItem->text();
   QString title = m_tableWidget->item(selectedRow, 1)->text();
 
+  m_populatingForm = true;
   m_formGroup->setVisible(true);
   m_nameEdit->setText(wmClass.toLower() + "_rule");
   m_matchClassEdit->setText("\"" + wmClass + "$\"");
   m_matchTitleEdit->setText(title.isEmpty() ? "" : "\"" + title + "$\"");
   m_matchTitleCheckBox->setChecked(!title.isEmpty());
+  m_floatCheckBox->setChecked(false);
+  m_sizeCheckBox->setChecked(false);
+  m_sizeWidthSpin->setValue(800);
+  m_sizeHeightSpin->setValue(600);
+  m_moveCheckBox->setChecked(false);
+  m_moveXSpin->setValue(0);
+  m_moveYSpin->setValue(0);
+  m_populatingForm = false;
 
-  QString address = classItem->data(Qt::UserRole).toString();
-  m_hyprClient.focusWindow(address);
+  HyprClient::focusWindow(classItem->data(Qt::UserRole).toString());
 }
 
 void MainWindow::populateFormFromRuleSelection() {
@@ -221,8 +305,8 @@ void MainWindow::populateFormFromRuleSelection() {
   const ExistingRule &rule = m_loadedRules[row];
   m_editingRuleIndex = row;
   m_tableWidget->clearSelection();
-  m_applyButton->setText("Update Rule");
 
+  m_populatingForm = true;
   m_formGroup->setVisible(true);
   m_nameEdit->setText(rule.name);
   m_matchClassEdit->setText(rule.matchClass);
@@ -232,17 +316,14 @@ void MainWindow::populateFormFromRuleSelection() {
 
   QStringList size = rule.size.split(' ', Qt::SkipEmptyParts);
   m_sizeCheckBox->setChecked(size.size() == 2);
-  if (size.size() == 2) {
-    m_sizeWidthSpin->setValue(size[0].toInt());
-    m_sizeHeightSpin->setValue(size[1].toInt());
-  }
+  m_sizeWidthSpin->setValue(size.size() == 2 ? size[0].toInt() : 800);
+  m_sizeHeightSpin->setValue(size.size() == 2 ? size[1].toInt() : 600);
 
   QStringList move = rule.move.split(' ', Qt::SkipEmptyParts);
   m_moveCheckBox->setChecked(move.size() == 2);
-  if (move.size() == 2) {
-    m_moveXSpin->setValue(move[0].toInt());
-    m_moveYSpin->setValue(move[1].toInt());
-  }
+  m_moveXSpin->setValue(move.size() == 2 ? move[0].toInt() : 0);
+  m_moveYSpin->setValue(move.size() == 2 ? move[1].toInt() : 0);
+  m_populatingForm = false;
 }
 
 void MainWindow::applySelectedRule() {
@@ -256,34 +337,15 @@ void MainWindow::applySelectedRule() {
       return;
     }
 
-    ExistingRule rule;
-    rule.name = m_nameEdit->text();
-    rule.matchClass = m_matchClassEdit->text();
-    rule.matchTitle =
-        m_matchTitleCheckBox->isChecked() ? m_matchTitleEdit->text() : "";
-    rule.floatEnabled = m_floatCheckBox->isChecked();
-    rule.size = m_sizeCheckBox->isChecked()
-                    ? QString("%1 %2")
-                          .arg(m_sizeWidthSpin->value())
-                          .arg(m_sizeHeightSpin->value())
-                    : "";
-    rule.move = m_moveCheckBox->isChecked()
-                    ? QString("%1 %2")
-                          .arg(m_moveXSpin->value())
-                          .arg(m_moveYSpin->value())
-                    : "";
-
+    ExistingRule rule = ruleFromForm();
     if (m_editingRuleIndex >= 0)
       m_loadedRules[m_editingRuleIndex] = rule;
     else
       m_loadedRules.append(rule);
   }
 
-  QString path = m_configFilePath.isEmpty()
-                     ? QDir::homePath() + "/.config/hypr/modules/windowrules.lua"
-                     : m_configFilePath;
-  QFileInfo fi(path);
-  QString oldPath = fi.path() + "/" + fi.completeBaseName() + "_old.lua";
+  const QString path = m_configFilePath;
+  const QString oldPath = backupPath();
 
   // ponytail: one-level undo — each apply replaces the previous backup
   if (QFile::exists(path)) {
@@ -295,7 +357,7 @@ void MainWindow::applySelectedRule() {
     }
   }
 
-  if (m_hyprClient.writeRulesFile(path, m_loadedRules, m_configHeader)) {
+  if (HyprClient::writeRulesFile(path, m_loadedRules, m_configHeader)) {
     int count = m_loadedRules.size();
     loadRulesFromFile(path);
     closeRuleForm();
@@ -310,11 +372,8 @@ void MainWindow::applySelectedRule() {
 }
 
 void MainWindow::restoreOldConfig() {
-  QString path = m_configFilePath.isEmpty()
-                     ? QDir::homePath() + "/.config/hypr/modules/windowrules.lua"
-                     : m_configFilePath;
-  QFileInfo fi(path);
-  QString oldPath = fi.path() + "/" + fi.completeBaseName() + "_old.lua";
+  const QString path = m_configFilePath;
+  const QString oldPath = backupPath();
 
   if (!QFile::exists(oldPath)) {
     QMessageBox::warning(this, "No Backup", "No backup file found:\n" + oldPath);
@@ -339,7 +398,6 @@ void MainWindow::closeRuleForm() {
   m_tableWidget->clearSelection();
   m_rulesTableWidget->clearSelection();
   m_editingRuleIndex = -1;
-  m_applyButton->setText("Apply Rule");
 }
 
 void MainWindow::browseConfigFile() {
@@ -360,7 +418,7 @@ void MainWindow::browseConfigFile() {
 void MainWindow::loadRulesFromFile(const QString &path) {
   m_configFilePath = path;
   m_configFileLabel->setText(path);
-  m_loadedRules = m_hyprClient.parseRulesFile(path, &m_configHeader);
+  m_loadedRules = HyprClient::parseRulesFile(path, &m_configHeader);
   refreshRulesTable();
 }
 
@@ -378,6 +436,9 @@ void MainWindow::refreshRulesTable() {
     m_rulesTableWidget->setItem(i, 5, new QTableWidgetItem(rule.move));
 
     QPushButton *removeButton = new QPushButton("Remove", this);
+    // NoFocus: focusing a cell widget makes the view select its row,
+    // which popped the rule form on every Remove click.
+    removeButton->setFocusPolicy(Qt::NoFocus);
     removeButton->setStyleSheet(
         "QPushButton { background-color: #c0392b; color: white; border: none;"
         " border-radius: 4px; margin: 6px; min-height: 24px; padding: 2px; }");

@@ -22,14 +22,6 @@ QGroupBox {
   border-radius: 10px;
   margin-top: 14px;
   padding: 10px;
-  font-weight: 600;
-}
-
-QGroupBox::title {
-  subcontrol-origin: margin;
-  left: 10px;
-  padding: 0 4px;
-  color: #b8b8b8;
 }
 
 QTableWidget {

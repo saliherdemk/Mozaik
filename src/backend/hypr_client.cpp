@@ -13,7 +13,8 @@ QVector<HyprWindow> HyprClient::fetchActiveWindows() {
 
   QProcess process;
   process.start("hyprctl", QStringList() << "-j" << "clients");
-  if (!process.waitForFinished()) {
+  // ponytail: blocks the UI thread; 3s cap instead of the 30s default
+  if (!process.waitForFinished(3000)) {
     qWarning() << "Failed to execute hyprctl command.";
     return windows;
   }
@@ -155,11 +156,11 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
   return rules;
 }
 
-bool HyprClient::focusWindow(const QString &address) {
+void HyprClient::focusWindow(const QString &address) {
   if (address.isEmpty())
-    return false;
+    return;
 
-  return QProcess::startDetached(
+  QProcess::startDetached(
       "hyprctl", QStringList() << "dispatch" << "focuswindow"
                                 << QString("address:%1").arg(address));
 }

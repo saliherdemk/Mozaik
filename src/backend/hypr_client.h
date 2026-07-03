@@ -19,19 +19,18 @@ struct ExistingRule {
   QString move;
 };
 
-class HyprClient {
-public:
-  HyprClient() = default;
+namespace HyprClient {
 
-  QVector<HyprWindow> fetchActiveWindows();
+QVector<HyprWindow> fetchActiveWindows();
 
-  bool writeRulesFile(const QString &path, const QVector<ExistingRule> &rules,
-                      const QString &header = QString());
+bool writeRulesFile(const QString &path, const QVector<ExistingRule> &rules,
+                    const QString &header = QString());
 
-  bool focusWindow(const QString &address);
+void focusWindow(const QString &address);
 
-  // header receives everything before the first rule block (requires,
-  // local vars, comments) so writes can preserve it.
-  QVector<ExistingRule> parseRulesFile(const QString &path,
-                                       QString *header = nullptr);
-};
+// header receives everything before the first rule block (requires,
+// local vars, comments) so writes can preserve it.
+QVector<ExistingRule> parseRulesFile(const QString &path,
+                                     QString *header = nullptr);
+
+} // namespace HyprClient
