@@ -13,7 +13,7 @@ QVector<HyprWindow> HyprClient::fetchActiveWindows() {
 
   QProcess process;
   process.start("hyprctl", QStringList() << "-j" << "clients");
-  // ponytail: blocks the UI thread; 3s cap instead of the 30s default
+
   if (!process.waitForFinished(3000)) {
     qWarning() << "Failed to execute hyprctl command.";
     return windows;
@@ -59,8 +59,8 @@ static QString serializeLuaRule(const ExistingRule &rule) {
     s += QString("  size = \"%1\",\n").arg(rule.size);
   if (!rule.move.isEmpty())
     s += QString("  move = \"%1\",\n").arg(rule.move);
-  // class/title hold raw Lua expressions (may be vars.* or ".." concats),
-  // so they are written back verbatim, never re-quoted.
+  if (!rule.opacity.isEmpty())
+    s += QString("  opacity = \"%1\",\n").arg(rule.opacity);
   if (rule.matchTitle.isEmpty())
     s += QString("  match = { class = %1 },\n").arg(rule.matchClass);
   else
@@ -117,6 +117,7 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
   static const QRegularExpression floatRe(R"re(\bfloat\s*=\s*true\b)re");
   static const QRegularExpression sizeRe(R"re(size\s*=\s*"([^"]*)")re");
   static const QRegularExpression moveRe(R"re(move\s*=\s*"([^"]*)")re");
+  static const QRegularExpression opacityRe(R"re(opacity\s*=\s*"([^"]*)")re");
 
   QRegularExpressionMatchIterator blockIt = kRuleBlockRe.globalMatch(content);
   while (blockIt.hasNext()) {
@@ -149,6 +150,10 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
     QRegularExpressionMatch moveMatch = moveRe.match(block);
     if (moveMatch.hasMatch())
       rule.move = moveMatch.captured(1);
+
+    QRegularExpressionMatch opacityMatch = opacityRe.match(block);
+    if (opacityMatch.hasMatch())
+      rule.opacity = opacityMatch.captured(1);
 
     rules.append(rule);
   }

@@ -17,6 +17,7 @@ struct ExistingRule {
   bool floatEnabled = false;
   QString size;
   QString move;
+  QString opacity; 
 };
 
 namespace HyprClient {
@@ -28,9 +29,7 @@ bool writeRulesFile(const QString &path, const QVector<ExistingRule> &rules,
 
 void focusWindow(const QString &address);
 
-// header receives everything before the first rule block (requires,
-// local vars, comments) so writes can preserve it.
 QVector<ExistingRule> parseRulesFile(const QString &path,
                                      QString *header = nullptr);
 
-} // namespace HyprClient
+} 

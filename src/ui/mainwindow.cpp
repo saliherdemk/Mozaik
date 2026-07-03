@@ -4,6 +4,8 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGraphicsDropShadowEffect>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -11,6 +13,7 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QSettings>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -22,9 +25,33 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   refreshWindowList();
 
   m_configFilePath =
-      QDir::homePath() + "/.config/hypr/modules/windowrules.lua";
+      QSettings("HyprMonitor", "HyprMonitor").value("configFile").toString();
   if (QFile::exists(m_configFilePath))
     loadRulesFromFile(m_configFilePath);
+  else
+    browseConfigFile(); 
+
+  if (m_configFilePath.isEmpty()) 
+    m_configFilePath =
+        QDir::homePath() + "/.config/hypr/modules/windowrules.lua";
+}
+
+void MainWindow::positionRuleForm() {
+  if (!m_formGroup->isVisible())
+    return;
+  QWidget *cw = centralWidget();
+  const int margin = 24;
+  int w = cw->width() - 2 * margin;
+  int h = m_formGroup->sizeHint().height();
+  int y = m_controlsLayout->geometry().top() - h - 8;
+  m_formGroup->setGeometry(margin, y, w, h);
+  m_closeRuleButton->move(w - 46, 13);
+  m_formGroup->raise();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+  QMainWindow::resizeEvent(event);
+  positionRuleForm();
 }
 
 QString MainWindow::backupPath() const {
@@ -35,6 +62,8 @@ QString MainWindow::backupPath() const {
 void MainWindow::setupUi() {
   QWidget *centralWidget = new QWidget(this);
   QVBoxLayout *mainLayout = new QVBoxLayout(centralWidget);
+  mainLayout->setContentsMargins(16, 16, 16, 16);
+  mainLayout->setSpacing(12);
   QHBoxLayout *controlsLayout = new QHBoxLayout();
 
   QHBoxLayout *browseLayout = new QHBoxLayout();
@@ -44,9 +73,10 @@ void MainWindow::setupUi() {
   browseLayout->addWidget(m_configFileLabel, 1);
 
   m_rulesTableWidget = new QTableWidget(this);
-  m_rulesTableWidget->setColumnCount(7);
-  m_rulesTableWidget->setHorizontalHeaderLabels(
-      {"Name", "Match Class", "Match Title", "Float", "Size", "Move", ""});
+  m_rulesTableWidget->setColumnCount(8);
+  m_rulesTableWidget->setHorizontalHeaderLabels({"Name", "Match Class",
+                                                 "Match Title", "Float", "Size",
+                                                 "Move", "Opacity", ""});
   m_rulesTableWidget->horizontalHeader()->setSectionResizeMode(
       QHeaderView::Stretch);
   m_rulesTableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -65,17 +95,25 @@ void MainWindow::setupUi() {
   m_tableWidget->setEditTriggers(QAbstractItemView::NoEditTriggers);
   m_tableWidget->verticalHeader()->setVisible(false);
 
-  m_formGroup = new QGroupBox(this);
+  m_formGroup = new QGroupBox(centralWidget);
   QVBoxLayout *formGroupLayout = new QVBoxLayout(m_formGroup);
 
-  QHBoxLayout *formHeaderLayout = new QHBoxLayout();
-  QPushButton *closeRuleButton = new QPushButton("Close", this);
-  formHeaderLayout->addStretch();
-  formHeaderLayout->addWidget(closeRuleButton);
-  formGroupLayout->addLayout(formHeaderLayout);
+  m_closeRuleButton = new QPushButton("✕", m_formGroup);
+  m_closeRuleButton->setFixedSize(30, 30);
+  m_closeRuleButton->setStyleSheet(
+      "QPushButton { padding: 0; border: none; border-radius: 6px;"
+      " color: #c2c7ce; background: transparent; }"
+      "QPushButton:hover { background-color: #383c42; color: #ffffff; }");
 
   QFormLayout *formLayout = new QFormLayout();
+  formLayout->setContentsMargins(0, 12, 28, 0);
   formGroupLayout->addLayout(formLayout);
+
+  QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(m_formGroup);
+  shadow->setBlurRadius(32);
+  shadow->setOffset(0, 8);
+  shadow->setColor(QColor(0, 0, 0, 160));
+  m_formGroup->setGraphicsEffect(shadow);
 
   m_nameEdit = new QLineEdit(this);
   formLayout->addRow("Name:", m_nameEdit);
@@ -96,58 +134,102 @@ void MainWindow::setupUi() {
   connect(m_matchTitleCheckBox, &QCheckBox::toggled, m_matchTitleEdit,
           &QLineEdit::setEnabled);
 
+  QGridLayout *attrGrid = new QGridLayout();
+  attrGrid->setContentsMargins(0, 8, 28, 0);
+  attrGrid->setHorizontalSpacing(32);
+  attrGrid->setVerticalSpacing(10);
+  attrGrid->setColumnStretch(0, 1);
+  attrGrid->setColumnStretch(1, 1);
+  formGroupLayout->addLayout(attrGrid);
+
   QHBoxLayout *floatLayout = new QHBoxLayout();
-  m_floatCheckBox = new QCheckBox(this);
+  m_floatCheckBox = new QCheckBox("Float", this);
   floatLayout->addWidget(m_floatCheckBox);
   floatLayout->addStretch();
-  formLayout->addRow("Float:", floatLayout);
+  attrGrid->addLayout(floatLayout, 0, 0);
 
   QHBoxLayout *sizeLayout = new QHBoxLayout();
-  m_sizeCheckBox = new QCheckBox(this);
+  m_sizeCheckBox = new QCheckBox("Size", this);
   m_sizeWidthSpin = new QSpinBox(this);
   m_sizeWidthSpin->setRange(1, 10000);
   m_sizeWidthSpin->setEnabled(false);
   m_sizeHeightSpin = new QSpinBox(this);
   m_sizeHeightSpin->setRange(1, 10000);
   m_sizeHeightSpin->setEnabled(false);
+  sizeLayout->setSpacing(8);
   sizeLayout->addWidget(m_sizeCheckBox);
+  sizeLayout->addSpacing(12);
   sizeLayout->addWidget(m_sizeWidthSpin);
   sizeLayout->addWidget(new QLabel("x", this));
   sizeLayout->addWidget(m_sizeHeightSpin);
-  formLayout->addRow("Size:", sizeLayout);
+  sizeLayout->addStretch();
+  attrGrid->addLayout(sizeLayout, 0, 1);
 
   connect(m_sizeCheckBox, &QCheckBox::toggled, m_sizeWidthSpin,
           &QSpinBox::setEnabled);
   connect(m_sizeCheckBox, &QCheckBox::toggled, m_sizeHeightSpin,
           &QSpinBox::setEnabled);
+
   QHBoxLayout *moveLayout = new QHBoxLayout();
-  m_moveCheckBox = new QCheckBox(this);
+  m_moveCheckBox = new QCheckBox("Move", this);
   m_moveXSpin = new QSpinBox(this);
   m_moveXSpin->setRange(-10000, 10000);
   m_moveXSpin->setEnabled(false);
   m_moveYSpin = new QSpinBox(this);
   m_moveYSpin->setRange(-10000, 10000);
   m_moveYSpin->setEnabled(false);
+  moveLayout->setSpacing(8);
   moveLayout->addWidget(m_moveCheckBox);
+  moveLayout->addSpacing(12);
   moveLayout->addWidget(m_moveXSpin);
   moveLayout->addWidget(new QLabel(",", this));
   moveLayout->addWidget(m_moveYSpin);
-  formLayout->addRow("Move:", moveLayout);
+  moveLayout->addStretch();
+  attrGrid->addLayout(moveLayout, 1, 0);
 
   connect(m_moveCheckBox, &QCheckBox::toggled, m_moveXSpin,
           &QSpinBox::setEnabled);
   connect(m_moveCheckBox, &QCheckBox::toggled, m_moveYSpin,
           &QSpinBox::setEnabled);
 
+  QHBoxLayout *opacityLayout = new QHBoxLayout();
+  m_opacityCheckBox = new QCheckBox("Opacity", this);
+  m_opacityActiveSpin = new QDoubleSpinBox(this);
+  m_opacityActiveSpin->setRange(0.0, 1.0);
+  m_opacityActiveSpin->setSingleStep(0.05);
+  m_opacityActiveSpin->setValue(1.0);
+  m_opacityActiveSpin->setEnabled(false);
+  m_opacityInactiveSpin = new QDoubleSpinBox(this);
+  m_opacityInactiveSpin->setRange(0.0, 1.0);
+  m_opacityInactiveSpin->setSingleStep(0.05);
+  m_opacityInactiveSpin->setValue(0.9);
+  m_opacityInactiveSpin->setEnabled(false);
+  m_opacityActiveSpin->setToolTip("Active opacity");
+  m_opacityInactiveSpin->setToolTip("Inactive opacity");
+  opacityLayout->setSpacing(8);
+  opacityLayout->addWidget(m_opacityCheckBox);
+  opacityLayout->addSpacing(12);
+  opacityLayout->addWidget(m_opacityActiveSpin);
+  opacityLayout->addWidget(new QLabel(",", this));
+  opacityLayout->addWidget(m_opacityInactiveSpin);
+  opacityLayout->addStretch();
+  attrGrid->addLayout(opacityLayout, 1, 1);
+
+  connect(m_opacityCheckBox, &QCheckBox::toggled, m_opacityActiveSpin,
+          &QDoubleSpinBox::setEnabled);
+  connect(m_opacityCheckBox, &QCheckBox::toggled, m_opacityInactiveSpin,
+          &QDoubleSpinBox::setEnabled);
+
   QPushButton *refreshButton = new QPushButton("Refresh List", this);
   QPushButton *restoreButton = new QPushButton("Restore Old", this);
   QPushButton *applyButton = new QPushButton("Apply Rule", this);
+  applyButton->setObjectName("primary");
 
   controlsLayout->addWidget(refreshButton);
   controlsLayout->addWidget(restoreButton);
   controlsLayout->addStretch();
   controlsLayout->addWidget(applyButton);
-  restoreButton->setVisible(false); // starts on the Active Windows tab
+  restoreButton->setVisible(false);
 
   m_formGroup->setVisible(false);
 
@@ -161,14 +243,14 @@ void MainWindow::setupUi() {
   tabs->addTab(savedTab, "Saved Rules");
 
   mainLayout->addWidget(tabs, 1);
-  mainLayout->addWidget(m_formGroup);
   mainLayout->addLayout(controlsLayout);
+  m_controlsLayout = controlsLayout;
 
   setCentralWidget(centralWidget);
 
   connect(refreshButton, &QPushButton::clicked, this,
           &MainWindow::refreshWindowList);
-  // Refresh belongs to the Active Windows tab, Restore to Saved Rules.
+
   connect(tabs, &QTabWidget::currentChanged, this,
           [refreshButton, restoreButton](int index) {
             refreshButton->setVisible(index == 0);
@@ -184,10 +266,9 @@ void MainWindow::setupUi() {
           &MainWindow::browseConfigFile);
   connect(restoreButton, &QPushButton::clicked, this,
           &MainWindow::restoreOldConfig);
-  connect(closeRuleButton, &QPushButton::clicked, this,
+  connect(m_closeRuleButton, &QPushButton::clicked, this,
           &MainWindow::closeRuleForm);
 
-  // Live-sync form edits into the selected rule and its table row.
   connect(m_nameEdit, &QLineEdit::textChanged, this,
           &MainWindow::syncFormToRule);
   connect(m_matchTitleCheckBox, &QCheckBox::toggled, this,
@@ -205,6 +286,13 @@ void MainWindow::setupUi() {
   connect(m_moveXSpin, qOverload<int>(&QSpinBox::valueChanged), this,
           &MainWindow::syncFormToRule);
   connect(m_moveYSpin, qOverload<int>(&QSpinBox::valueChanged), this,
+          &MainWindow::syncFormToRule);
+  connect(m_opacityCheckBox, &QCheckBox::toggled, this,
+          &MainWindow::syncFormToRule);
+  connect(m_opacityActiveSpin, qOverload<double>(&QDoubleSpinBox::valueChanged),
+          this, &MainWindow::syncFormToRule);
+  connect(m_opacityInactiveSpin,
+          qOverload<double>(&QDoubleSpinBox::valueChanged), this,
           &MainWindow::syncFormToRule);
 }
 
@@ -225,6 +313,11 @@ ExistingRule MainWindow::ruleFromForm() const {
                         .arg(m_moveXSpin->value())
                         .arg(m_moveYSpin->value())
                   : "";
+  rule.opacity = m_opacityCheckBox->isChecked()
+                     ? QString("%1 %2")
+                           .arg(m_opacityActiveSpin->value())
+                           .arg(m_opacityInactiveSpin->value())
+                     : "";
   return rule;
 }
 
@@ -242,6 +335,7 @@ void MainWindow::syncFormToRule() {
   m_rulesTableWidget->item(i, 3)->setText(rule.floatEnabled ? "Yes" : "No");
   m_rulesTableWidget->item(i, 4)->setText(rule.size);
   m_rulesTableWidget->item(i, 5)->setText(rule.move);
+  m_rulesTableWidget->item(i, 6)->setText(rule.opacity);
 }
 
 void MainWindow::refreshWindowList() {
@@ -291,7 +385,11 @@ void MainWindow::populateFormFromSelection() {
   m_moveCheckBox->setChecked(false);
   m_moveXSpin->setValue(0);
   m_moveYSpin->setValue(0);
+  m_opacityCheckBox->setChecked(false);
+  m_opacityActiveSpin->setValue(1.0);
+  m_opacityInactiveSpin->setValue(0.9);
   m_populatingForm = false;
+  positionRuleForm();
 
   HyprClient::focusWindow(classItem->data(Qt::UserRole).toString());
 }
@@ -323,12 +421,20 @@ void MainWindow::populateFormFromRuleSelection() {
   m_moveCheckBox->setChecked(move.size() == 2);
   m_moveXSpin->setValue(move.size() == 2 ? move[0].toInt() : 0);
   m_moveYSpin->setValue(move.size() == 2 ? move[1].toInt() : 0);
+
+  QStringList opacity = rule.opacity.split(' ', Qt::SkipEmptyParts);
+  opacity.removeAll("override");
+  m_opacityCheckBox->setChecked(!opacity.isEmpty());
+  m_opacityActiveSpin->setValue(opacity.isEmpty() ? 1.0
+                                                  : opacity[0].toDouble());
+  m_opacityInactiveSpin->setValue(opacity.size() > 1 ? opacity[1].toDouble()
+                                  : opacity.isEmpty() ? 0.9
+                                                      : opacity[0].toDouble());
   m_populatingForm = false;
+  positionRuleForm();
 }
 
 void MainWindow::applySelectedRule() {
-  // Only commit the form when it's open; a hidden form means "just rewrite
-  // the file from the current list" (e.g. after removals).
   if (m_formGroup->isVisible()) {
     if (m_nameEdit->text().isEmpty() || m_matchClassEdit->text().isEmpty()) {
       QMessageBox::warning(this, "Missing Fields",
@@ -347,7 +453,6 @@ void MainWindow::applySelectedRule() {
   const QString path = m_configFilePath;
   const QString oldPath = backupPath();
 
-  // ponytail: one-level undo — each apply replaces the previous backup
   if (QFile::exists(path)) {
     QFile::remove(oldPath);
     if (!QFile::rename(path, oldPath)) {
@@ -380,7 +485,7 @@ void MainWindow::restoreOldConfig() {
     return;
   }
 
-  QFile::remove(path); // drop the updated version
+  QFile::remove(path);
   if (!QFile::rename(oldPath, path)) {
     QMessageBox::critical(this, "Error", "Failed to restore " + oldPath);
     return;
@@ -418,6 +523,7 @@ void MainWindow::browseConfigFile() {
 void MainWindow::loadRulesFromFile(const QString &path) {
   m_configFilePath = path;
   m_configFileLabel->setText(path);
+  QSettings("HyprMonitor", "HyprMonitor").setValue("configFile", path);
   m_loadedRules = HyprClient::parseRulesFile(path, &m_configHeader);
   refreshRulesTable();
 }
@@ -434,19 +540,32 @@ void MainWindow::refreshRulesTable() {
         i, 3, new QTableWidgetItem(rule.floatEnabled ? "Yes" : "No"));
     m_rulesTableWidget->setItem(i, 4, new QTableWidgetItem(rule.size));
     m_rulesTableWidget->setItem(i, 5, new QTableWidgetItem(rule.move));
+    m_rulesTableWidget->setItem(i, 6, new QTableWidgetItem(rule.opacity));
 
     QPushButton *removeButton = new QPushButton("Remove", this);
-    // NoFocus: focusing a cell widget makes the view select its row,
-    // which popped the rule form on every Remove click.
+
     removeButton->setFocusPolicy(Qt::NoFocus);
     removeButton->setStyleSheet(
-        "QPushButton { background-color: #c0392b; color: white; border: none;"
-        " border-radius: 4px; margin: 6px; min-height: 24px; padding: 2px; }");
+        "QPushButton { background-color: #8f3a42; color: #ffffff;"
+        " border: 1px solid #a4454e; border-radius: 6px; padding: 2px; }"
+        "QPushButton:hover { background-color: #a4454e;"
+        " border: 1px solid #bb545e; }");
+    removeButton->setFixedHeight(28);
+    removeButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     connect(removeButton, &QPushButton::clicked, this, [this, i]() {
       m_loadedRules.removeAt(i);
       closeRuleForm();
       refreshRulesTable();
     });
-    m_rulesTableWidget->setCellWidget(i, 6, removeButton);
+
+    QWidget *cellWrapper = new QWidget(this);
+    cellWrapper->setStyleSheet("background: transparent;");
+    QHBoxLayout *cellLayout = new QHBoxLayout(cellWrapper);
+    cellLayout->setContentsMargins(0, 0, 0, 0);
+
+    cellLayout->addStretch(1);
+    cellLayout->addWidget(removeButton, 8);
+    cellLayout->addStretch(1);
+    m_rulesTableWidget->setCellWidget(i, 7, cellWrapper);
   }
 }

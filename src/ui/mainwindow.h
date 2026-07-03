@@ -1,10 +1,13 @@
 #pragma once
 #include "hypr_client.h"
 #include <QCheckBox>
+#include <QDoubleSpinBox>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QPushButton>
 #include <QSpinBox>
 #include <QTableWidget>
 
@@ -33,6 +36,8 @@ private:
   QTableWidget *m_tableWidget;
 
   QGroupBox *m_formGroup;
+  QPushButton *m_closeRuleButton;
+  QHBoxLayout *m_controlsLayout;
 
   QLineEdit *m_nameEdit;
   QLineEdit *m_matchClassEdit;
@@ -49,6 +54,10 @@ private:
   QSpinBox *m_moveXSpin;
   QSpinBox *m_moveYSpin;
 
+  QCheckBox *m_opacityCheckBox;
+  QDoubleSpinBox *m_opacityActiveSpin;
+  QDoubleSpinBox *m_opacityInactiveSpin;
+
   bool m_populatingForm = false;
 
   void setupUi();
@@ -58,4 +67,8 @@ private:
   void syncFormToRule();
   ExistingRule ruleFromForm() const;
   QString backupPath() const;
+  void positionRuleForm();
+
+protected:
+  void resizeEvent(QResizeEvent *event) override;
 };
