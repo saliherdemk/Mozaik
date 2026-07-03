@@ -21,6 +21,16 @@
 - Qt 6
 - CMake
 
+## Install
+
+From the [AUR](https://aur.archlinux.org/packages/mozaik):
+
+```sh
+yay -S mozaik
+```
+
+Or grab a prebuilt binary from the [releases page](https://github.com/saliherdemk/hyprmonitor/releases).
+
 ## Build
 
 ```sh
@@ -40,7 +50,7 @@ Pick a window, tweak the rule form, hit **Apply Rule**.
 
 
 > [!WARNING]
-> **Mozaik rewrites the whole rules file on every save.** If your window rules currently live inside `hyprland.lua`, move them into a separate file first — otherwise the rest of your config would be overwritten.
+> **Mozaik rewrites the whole rules file on every save.** If your window rules currently live inside `hyprland.lua`, move them into a separate file first otherwise the rest of your config would be overwritten.
 
 Keep your window rules in their own file, separate from `hyprland.lua`:
 
