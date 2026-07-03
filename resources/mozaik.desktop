@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Mozaik
+Comment=Hyprland window rule manager
+Exec=Mozaik
+Icon=mozaik
+Categories=Utility;Settings;

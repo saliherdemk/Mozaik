@@ -18,7 +18,8 @@
 #include <QVBoxLayout>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
-  setWindowTitle("HyprMonitor - Rule Manager");
+  setWindowTitle("Mozaik - Rule Manager");
+  setWindowIcon(QIcon(":/icons/mozaik.svg"));
   resize(900, 700);
 
   QFile styleFile(":/style.qss");
@@ -29,7 +30,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   refreshWindowList();
 
   m_configFilePath =
-      QSettings("HyprMonitor", "HyprMonitor").value("configFile").toString();
+      QSettings("Mozaik", "Mozaik").value("configFile").toString();
   if (QFile::exists(m_configFilePath)) {
     loadRulesFromFile(m_configFilePath);
   } else {
@@ -240,6 +241,13 @@ void MainWindow::setupUi() {
   QWidget *savedTab = new QWidget(this);
   QVBoxLayout *savedLayout = new QVBoxLayout(savedTab);
   savedLayout->addLayout(browseLayout);
+  QLabel *rewriteWarning = new QLabel(
+      "⚠ Applying rules rewrites this file entirely — keep your window rules "
+      "in a separate file, not inside hyprland.lua.",
+      this);
+  rewriteWarning->setObjectName("rewriteWarning");
+  rewriteWarning->setWordWrap(true);
+  savedLayout->addWidget(rewriteWarning);
   savedLayout->addWidget(m_rulesTableWidget);
   tabs->addTab(savedTab, "Saved Rules");
 
@@ -512,7 +520,7 @@ void MainWindow::browseConfigFile() {
 void MainWindow::loadRulesFromFile(const QString &path) {
   m_configFilePath = path;
   m_configFileLabel->setText(path);
-  QSettings("HyprMonitor", "HyprMonitor").setValue("configFile", path);
+  QSettings("Mozaik", "Mozaik").setValue("configFile", path);
   m_loadedRules = HyprClient::parseRulesFile(path, &m_configHeader);
   refreshRulesTable();
 }

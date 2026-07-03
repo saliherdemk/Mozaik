@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 4.3)
 
-project(HyprMonitor)
+project(Mozaik)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +12,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Widgets)
 
 include_directories(src/backend src/ui)
 
-add_executable(HyprMonitor
+add_executable(Mozaik
     src/main.cpp
     src/ui/mainwindow.cpp
     src/ui/mainwindow.h
@@ -21,7 +21,12 @@ add_executable(HyprMonitor
     resources/resources.qrc
 )
 
-target_link_libraries(HyprMonitor PRIVATE
+target_link_libraries(Mozaik PRIVATE
     Qt6::Core
     Qt6::Widgets
 )
+
+install(TARGETS Mozaik DESTINATION bin)
+install(FILES resources/mozaik.desktop DESTINATION share/applications)
+install(FILES resources/icons/mozaik.svg
+        DESTINATION share/icons/hicolor/scalable/apps)

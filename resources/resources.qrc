@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/icons">
     <file alias="check.svg">icons/check.svg</file>
+    <file alias="mozaik.svg">icons/mozaik.svg</file>
   </qresource>
   <qresource prefix="/">
     <file>style.qss</file>

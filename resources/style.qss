@@ -215,3 +215,11 @@ QScrollBar::add-line, QScrollBar::sub-line {
 QMessageBox QLabel {
   color: #e2e4e8;
 }
+
+QLabel#rewriteWarning {
+  color: #d9a05b;
+  background-color: rgba(217, 160, 91, 0.08);
+  border: 1px solid rgba(217, 160, 91, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
