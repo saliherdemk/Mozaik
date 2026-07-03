@@ -13,13 +13,13 @@ jobs:
     container: archlinux:latest
     steps:
       - name: Install deps
-        run: pacman -Syu --noconfirm base-devel cmake ninja qt6-base git
+        run: pacman -Syu --noconfirm base-devel cmake qt6-base git
 
       - uses: actions/checkout@v4
 
       - name: Build
         run: |
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build
 
       - name: Package

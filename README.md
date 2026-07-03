@@ -29,7 +29,7 @@ From the [AUR](https://aur.archlinux.org/packages/mozaik):
 yay -S mozaik
 ```
 
-Or grab a prebuilt binary from the [releases page](https://github.com/saliherdemk/hyprmonitor/releases).
+Or grab a prebuilt binary from the [releases page](https://github.com/saliherdemk/Mozaik/releases).
 
 ## Build
 
