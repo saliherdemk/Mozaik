@@ -100,8 +100,7 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
     return rules;
   }
 
-  QString content = QTextStream(&file).readAll();
-  file.close();
+  QString content = QString::fromUtf8(file.readAll());
 
   if (header) {
     QRegularExpressionMatch first = kRuleBlockRe.match(content);
@@ -166,6 +165,8 @@ void HyprClient::focusWindow(const QString &address) {
     return;
 
   QProcess::startDetached(
-      "hyprctl", QStringList() << "dispatch" << "focuswindow"
-                                << QString("address:%1").arg(address));
+      "hyprctl",
+      QStringList() << "dispatch"
+                    << QString("hl.dsp.focus({ window = 'address:%1' })")
+                           .arg(address));
 }

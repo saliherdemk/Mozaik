@@ -65,6 +65,7 @@ private:
   void refreshRulesTable();
   void closeRuleForm();
   void syncFormToRule();
+  void updateRuleRow(int i);
   ExistingRule ruleFromForm() const;
   QString backupPath() const;
   void positionRuleForm();

@@ -21,30 +21,33 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent) {
   setWindowTitle("HyprMonitor - Rule Manager");
   resize(900, 700);
 
+  QFile styleFile(":/style.qss");
+  if (styleFile.open(QIODevice::ReadOnly))
+    setStyleSheet(QString::fromUtf8(styleFile.readAll()));
+
   setupUi();
   refreshWindowList();
 
   m_configFilePath =
       QSettings("HyprMonitor", "HyprMonitor").value("configFile").toString();
-  if (QFile::exists(m_configFilePath))
+  if (QFile::exists(m_configFilePath)) {
     loadRulesFromFile(m_configFilePath);
-  else
-    browseConfigFile(); 
-
-  if (m_configFilePath.isEmpty()) 
+  } else {
     m_configFilePath =
         QDir::homePath() + "/.config/hypr/modules/windowrules.lua";
+    QMetaObject::invokeMethod(this, &MainWindow::browseConfigFile,
+                              Qt::QueuedConnection);
+  }
 }
 
 void MainWindow::positionRuleForm() {
   if (!m_formGroup->isVisible())
     return;
   QWidget *cw = centralWidget();
-  const int margin = 24;
-  int w = cw->width() - 2 * margin;
+  int w = cw->width();
   int h = m_formGroup->sizeHint().height();
   int y = m_controlsLayout->geometry().top() - h - 8;
-  m_formGroup->setGeometry(margin, y, w, h);
+  m_formGroup->setGeometry(0, y, w, h);
   m_closeRuleButton->move(w - 46, 13);
   m_formGroup->raise();
 }
@@ -96,14 +99,12 @@ void MainWindow::setupUi() {
   m_tableWidget->verticalHeader()->setVisible(false);
 
   m_formGroup = new QGroupBox(centralWidget);
+  m_formGroup->setObjectName("ruleForm");
   QVBoxLayout *formGroupLayout = new QVBoxLayout(m_formGroup);
 
   m_closeRuleButton = new QPushButton("✕", m_formGroup);
+  m_closeRuleButton->setObjectName("closeRule");
   m_closeRuleButton->setFixedSize(30, 30);
-  m_closeRuleButton->setStyleSheet(
-      "QPushButton { padding: 0; border: none; border-radius: 6px;"
-      " color: #c2c7ce; background: transparent; }"
-      "QPushButton:hover { background-color: #383c42; color: #ffffff; }");
 
   QFormLayout *formLayout = new QFormLayout();
   formLayout->setContentsMargins(0, 12, 28, 0);
@@ -271,29 +272,15 @@ void MainWindow::setupUi() {
 
   connect(m_nameEdit, &QLineEdit::textChanged, this,
           &MainWindow::syncFormToRule);
-  connect(m_matchTitleCheckBox, &QCheckBox::toggled, this,
-          &MainWindow::syncFormToRule);
-  connect(m_floatCheckBox, &QCheckBox::toggled, this,
-          &MainWindow::syncFormToRule);
-  connect(m_sizeCheckBox, &QCheckBox::toggled, this,
-          &MainWindow::syncFormToRule);
-  connect(m_moveCheckBox, &QCheckBox::toggled, this,
-          &MainWindow::syncFormToRule);
-  connect(m_sizeWidthSpin, qOverload<int>(&QSpinBox::valueChanged), this,
-          &MainWindow::syncFormToRule);
-  connect(m_sizeHeightSpin, qOverload<int>(&QSpinBox::valueChanged), this,
-          &MainWindow::syncFormToRule);
-  connect(m_moveXSpin, qOverload<int>(&QSpinBox::valueChanged), this,
-          &MainWindow::syncFormToRule);
-  connect(m_moveYSpin, qOverload<int>(&QSpinBox::valueChanged), this,
-          &MainWindow::syncFormToRule);
-  connect(m_opacityCheckBox, &QCheckBox::toggled, this,
-          &MainWindow::syncFormToRule);
-  connect(m_opacityActiveSpin, qOverload<double>(&QDoubleSpinBox::valueChanged),
-          this, &MainWindow::syncFormToRule);
-  connect(m_opacityInactiveSpin,
-          qOverload<double>(&QDoubleSpinBox::valueChanged), this,
-          &MainWindow::syncFormToRule);
+  for (QCheckBox *cb : {m_matchTitleCheckBox, m_floatCheckBox, m_sizeCheckBox,
+                        m_moveCheckBox, m_opacityCheckBox})
+    connect(cb, &QCheckBox::toggled, this, &MainWindow::syncFormToRule);
+  for (QSpinBox *sb :
+       {m_sizeWidthSpin, m_sizeHeightSpin, m_moveXSpin, m_moveYSpin})
+    connect(sb, &QSpinBox::valueChanged, this, &MainWindow::syncFormToRule);
+  for (QDoubleSpinBox *sb : {m_opacityActiveSpin, m_opacityInactiveSpin})
+    connect(sb, &QDoubleSpinBox::valueChanged, this,
+            &MainWindow::syncFormToRule);
 }
 
 ExistingRule MainWindow::ruleFromForm() const {
@@ -325,10 +312,12 @@ void MainWindow::syncFormToRule() {
   if (m_populatingForm || m_editingRuleIndex < 0)
     return;
 
-  const ExistingRule rule = ruleFromForm();
-  m_loadedRules[m_editingRuleIndex] = rule;
+  m_loadedRules[m_editingRuleIndex] = ruleFromForm();
+  updateRuleRow(m_editingRuleIndex);
+}
 
-  int i = m_editingRuleIndex;
+void MainWindow::updateRuleRow(int i) {
+  const ExistingRule &rule = m_loadedRules[i];
   m_rulesTableWidget->item(i, 0)->setText(rule.name);
   m_rulesTableWidget->item(i, 1)->setText(rule.matchClass);
   m_rulesTableWidget->item(i, 2)->setText(rule.matchTitle);
@@ -531,25 +520,14 @@ void MainWindow::loadRulesFromFile(const QString &path) {
 void MainWindow::refreshRulesTable() {
   m_rulesTableWidget->setRowCount(0);
   for (int i = 0; i < m_loadedRules.size(); ++i) {
-    const ExistingRule &rule = m_loadedRules[i];
     m_rulesTableWidget->insertRow(i);
-    m_rulesTableWidget->setItem(i, 0, new QTableWidgetItem(rule.name));
-    m_rulesTableWidget->setItem(i, 1, new QTableWidgetItem(rule.matchClass));
-    m_rulesTableWidget->setItem(i, 2, new QTableWidgetItem(rule.matchTitle));
-    m_rulesTableWidget->setItem(
-        i, 3, new QTableWidgetItem(rule.floatEnabled ? "Yes" : "No"));
-    m_rulesTableWidget->setItem(i, 4, new QTableWidgetItem(rule.size));
-    m_rulesTableWidget->setItem(i, 5, new QTableWidgetItem(rule.move));
-    m_rulesTableWidget->setItem(i, 6, new QTableWidgetItem(rule.opacity));
+    for (int col = 0; col < 7; ++col)
+      m_rulesTableWidget->setItem(i, col, new QTableWidgetItem);
+    updateRuleRow(i);
 
     QPushButton *removeButton = new QPushButton("Remove", this);
-
+    removeButton->setObjectName("removeRule");
     removeButton->setFocusPolicy(Qt::NoFocus);
-    removeButton->setStyleSheet(
-        "QPushButton { background-color: #8f3a42; color: #ffffff;"
-        " border: 1px solid #a4454e; border-radius: 6px; padding: 2px; }"
-        "QPushButton:hover { background-color: #a4454e;"
-        " border: 1px solid #bb545e; }");
     removeButton->setFixedHeight(28);
     removeButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     connect(removeButton, &QPushButton::clicked, this, [this, i]() {
@@ -559,7 +537,8 @@ void MainWindow::refreshRulesTable() {
     });
 
     QWidget *cellWrapper = new QWidget(this);
-    cellWrapper->setStyleSheet("background: transparent;");
+    cellWrapper->setObjectName("cellWrapper");
+    cellWrapper->setStyleSheet("#cellWrapper { background: transparent; }");
     QHBoxLayout *cellLayout = new QHBoxLayout(cellWrapper);
     cellLayout->setContentsMargins(0, 0, 0, 0);
 
