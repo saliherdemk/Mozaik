@@ -243,10 +243,12 @@ void MainWindow::setupUi() {
   savedLayout->addLayout(browseLayout);
   QLabel *rewriteWarning = new QLabel(
       "⚠ Applying rules rewrites this file entirely — keep your window rules "
-      "in a separate file, not inside hyprland.lua.",
+      "in a separate file, not inside hyprland.lua. "
+      "<a href=\"https://github.com/saliherdemk/Mozaik#usage\">Learn more</a>",
       this);
   rewriteWarning->setObjectName("rewriteWarning");
   rewriteWarning->setWordWrap(true);
+  rewriteWarning->setOpenExternalLinks(true);
   savedLayout->addWidget(rewriteWarning);
   savedLayout->addWidget(m_rulesTableWidget);
   tabs->addTab(savedTab, "Saved Rules");
