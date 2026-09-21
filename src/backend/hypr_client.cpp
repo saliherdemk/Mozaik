@@ -35,6 +35,7 @@ QVector<HyprWindow> HyprClient::fetchActiveWindows() {
     win.address = obj["address"].toString();
     win.wmClass = obj["class"].toString();
     win.title = obj["title"].toString();
+    win.initialTitle = obj["initialTitle"].toString();
     win.isFloating = obj["floating"].toBool();
 
     QJsonObject workspaceObj = obj["workspace"].toObject();
@@ -61,11 +62,14 @@ static QString serializeLuaRule(const ExistingRule &rule) {
     s += QString("  move = \"%1\",\n").arg(rule.move);
   if (!rule.opacity.isEmpty())
     s += QString("  opacity = \"%1\",\n").arg(rule.opacity);
-  if (rule.matchTitle.isEmpty())
+  if (rule.matchTitle.isEmpty() && rule.matchInitialTitle.isEmpty())
     s += QString("  match = { class = %1 },\n").arg(rule.matchClass);
-  else
+  else if (!rule.matchTitle.isEmpty())
     s += QString("  match = { class = %1, title = %2 },\n")
-             .arg(rule.matchClass, rule.matchTitle);
+              .arg(rule.matchClass, rule.matchTitle);
+  else
+    s += QString("  match = { class = %1, initial_title = %2 },\n")
+             .arg(rule.matchClass, rule.matchInitialTitle);
   s += "})";
   return s;
 }
@@ -111,8 +115,11 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
       R"re(match\s*=\s*\{(.*?)\})re",
       QRegularExpression::DotMatchesEverythingOption);
   static const QRegularExpression nameRe(R"re(name\s*=\s*"([^"]*)")re");
-  static const QRegularExpression classFieldRe(
-      R"re(class\s*=\s*(.+?)(?:,\s*title\s*=\s*(.+?))?\s*,?\s*$)re");
+  static const QRegularExpression classFieldRe(R"re(class\s*=\s*(.+?)(?:,|$))re");
+  static const QRegularExpression titleFieldRe(
+      R"re((?:^|,)\s*title\s*=\s*(.+?)(?:,|$))re");
+  static const QRegularExpression initialTitleFieldRe(
+      R"re((?:^|,)\s*initial_title\s*=\s*(.+?)(?:,|$))re");
   static const QRegularExpression floatRe(R"re(\bfloat\s*=\s*true\b)re");
   static const QRegularExpression sizeRe(R"re(size\s*=\s*"([^"]*)")re");
   static const QRegularExpression moveRe(R"re(move\s*=\s*"([^"]*)")re");
@@ -135,9 +142,14 @@ QVector<ExistingRule> HyprClient::parseRulesFile(const QString &path,
       QRegularExpressionMatch fieldsMatch = classFieldRe.match(matchBlock);
       if (fieldsMatch.hasMatch()) {
         rule.matchClass = fieldsMatch.captured(1).trimmed();
-        if (!fieldsMatch.captured(2).isEmpty())
-          rule.matchTitle = fieldsMatch.captured(2).trimmed();
       }
+      QRegularExpressionMatch titleMatch = titleFieldRe.match(matchBlock);
+      if (titleMatch.hasMatch())
+        rule.matchTitle = titleMatch.captured(1).trimmed();
+      QRegularExpressionMatch initialTitleMatch =
+          initialTitleFieldRe.match(matchBlock);
+      if (initialTitleMatch.hasMatch())
+        rule.matchInitialTitle = initialTitleMatch.captured(1).trimmed();
     }
 
     rule.floatEnabled = floatRe.match(block).hasMatch();

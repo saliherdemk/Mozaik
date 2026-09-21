@@ -90,9 +90,9 @@ void MainWindow::setupUi() {
   m_rulesTableWidget->verticalHeader()->setVisible(false);
 
   m_tableWidget = new QTableWidget(this);
-  m_tableWidget->setColumnCount(4);
+  m_tableWidget->setColumnCount(5);
   m_tableWidget->setHorizontalHeaderLabels(
-      {"Class", "Title", "Workspace", "State"});
+      {"Class", "Current Title", "Initial Title", "Workspace", "State"});
   m_tableWidget->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
   m_tableWidget->setSelectionBehavior(QAbstractItemView::SelectRows);
   m_tableWidget->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -111,7 +111,8 @@ void MainWindow::setupUi() {
   formLayout->setContentsMargins(0, 12, 28, 0);
   formGroupLayout->addLayout(formLayout);
 
-  QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(m_formGroup);
+  QGraphicsDropShadowEffect *shadow =
+      new QGraphicsDropShadowEffect(m_formGroup);
   shadow->setBlurRadius(32);
   shadow->setOffset(0, 8);
   shadow->setColor(QColor(0, 0, 0, 160));
@@ -125,16 +126,10 @@ void MainWindow::setupUi() {
   formLayout->addRow("Match Class:", m_matchClassEdit);
 
   QHBoxLayout *matchTitleLayout = new QHBoxLayout();
-  m_matchTitleCheckBox = new QCheckBox(this);
   m_matchTitleEdit = new QLineEdit(this);
   m_matchTitleEdit->setReadOnly(true);
-  m_matchTitleEdit->setEnabled(false);
-  matchTitleLayout->addWidget(m_matchTitleCheckBox);
   matchTitleLayout->addWidget(m_matchTitleEdit);
   formLayout->addRow("Match Title:", matchTitleLayout);
-
-  connect(m_matchTitleCheckBox, &QCheckBox::toggled, m_matchTitleEdit,
-          &QLineEdit::setEnabled);
 
   QGridLayout *attrGrid = new QGridLayout();
   attrGrid->setContentsMargins(0, 8, 28, 0);
@@ -282,8 +277,8 @@ void MainWindow::setupUi() {
 
   connect(m_nameEdit, &QLineEdit::textChanged, this,
           &MainWindow::syncFormToRule);
-  for (QCheckBox *cb : {m_matchTitleCheckBox, m_floatCheckBox, m_sizeCheckBox,
-                        m_moveCheckBox, m_opacityCheckBox})
+  for (QCheckBox *cb :
+       {m_floatCheckBox, m_sizeCheckBox, m_moveCheckBox, m_opacityCheckBox})
     connect(cb, &QCheckBox::toggled, this, &MainWindow::syncFormToRule);
   for (QSpinBox *sb :
        {m_sizeWidthSpin, m_sizeHeightSpin, m_moveXSpin, m_moveYSpin})
@@ -297,19 +292,19 @@ ExistingRule MainWindow::ruleFromForm() const {
   ExistingRule rule;
   rule.name = m_nameEdit->text();
   rule.matchClass = m_matchClassEdit->text();
-  rule.matchTitle =
-      m_matchTitleCheckBox->isChecked() ? m_matchTitleEdit->text() : "";
+  if (m_matchInitialTitle)
+    rule.matchInitialTitle = m_matchTitleEdit->text();
+  else
+    rule.matchTitle = m_matchTitleEdit->text();
   rule.floatEnabled = m_floatCheckBox->isChecked();
-  rule.size = m_sizeCheckBox->isChecked()
-                  ? QString("%1 %2")
-                        .arg(m_sizeWidthSpin->value())
-                        .arg(m_sizeHeightSpin->value())
-                  : "";
-  rule.move = m_moveCheckBox->isChecked()
-                  ? QString("%1 %2")
-                        .arg(m_moveXSpin->value())
-                        .arg(m_moveYSpin->value())
-                  : "";
+  rule.size = m_sizeCheckBox->isChecked() ? QString("%1 %2")
+                                                .arg(m_sizeWidthSpin->value())
+                                                .arg(m_sizeHeightSpin->value())
+                                          : "";
+  rule.move =
+      m_moveCheckBox->isChecked()
+          ? QString("%1 %2").arg(m_moveXSpin->value()).arg(m_moveYSpin->value())
+          : "";
   rule.opacity = m_opacityCheckBox->isChecked()
                      ? QString("%1 %2")
                            .arg(m_opacityActiveSpin->value())
@@ -330,7 +325,9 @@ void MainWindow::updateRuleRow(int i) {
   const ExistingRule &rule = m_loadedRules[i];
   m_rulesTableWidget->item(i, 0)->setText(rule.name);
   m_rulesTableWidget->item(i, 1)->setText(rule.matchClass);
-  m_rulesTableWidget->item(i, 2)->setText(rule.matchTitle);
+  m_rulesTableWidget->item(i, 2)->setText(
+      !rule.matchTitle.isEmpty() ? rule.matchTitle
+                                 : "initial: " + rule.matchInitialTitle);
   m_rulesTableWidget->item(i, 3)->setText(rule.floatEnabled ? "Yes" : "No");
   m_rulesTableWidget->item(i, 4)->setText(rule.size);
   m_rulesTableWidget->item(i, 5)->setText(rule.move);
@@ -351,11 +348,13 @@ void MainWindow::refreshWindowList() {
     m_tableWidget->setItem(i, 0, classItem);
     m_tableWidget->setItem(i, 1, new QTableWidgetItem(currentWindows[i].title));
     m_tableWidget->setItem(
-        i, 2,
+        i, 2, new QTableWidgetItem(currentWindows[i].initialTitle));
+    m_tableWidget->setItem(
+        i, 3,
         new QTableWidgetItem(QString::number(currentWindows[i].workspaceId)));
 
     QString stateStr = currentWindows[i].isFloating ? "Floating" : "Tiled";
-    m_tableWidget->setItem(i, 3, new QTableWidgetItem(stateStr));
+    m_tableWidget->setItem(i, 4, new QTableWidgetItem(stateStr));
   }
 }
 
@@ -370,13 +369,20 @@ void MainWindow::populateFormFromSelection() {
   QTableWidgetItem *classItem = m_tableWidget->item(selectedRow, 0);
   QString wmClass = classItem->text();
   QString title = m_tableWidget->item(selectedRow, 1)->text();
+  QString initialTitle = m_tableWidget->item(selectedRow, 2)->text();
 
   m_populatingForm = true;
   m_formGroup->setVisible(true);
   m_nameEdit->setText(wmClass.toLower() + "_rule");
   m_matchClassEdit->setText("\"" + wmClass + "$\"");
-  m_matchTitleEdit->setText(title.isEmpty() ? "" : "\"" + title + "$\"");
-  m_matchTitleCheckBox->setChecked(!title.isEmpty());
+  m_matchInitialTitle = !initialTitle.isEmpty() && initialTitle != title;
+  const QString matchTitle = m_matchInitialTitle ? initialTitle : title;
+  m_matchTitleEdit->setText(matchTitle.isEmpty() ? ""
+                                                 : "\"" + matchTitle + "$\"");
+  m_matchTitleEdit->setToolTip(
+      m_matchInitialTitle
+          ? "Uses the initial title because it differs from the current title."
+          : "Uses the current title because it matches the initial title.");
   m_floatCheckBox->setChecked(false);
   m_sizeCheckBox->setChecked(false);
   m_sizeWidthSpin->setValue(800);
@@ -407,8 +413,13 @@ void MainWindow::populateFormFromRuleSelection() {
   m_formGroup->setVisible(true);
   m_nameEdit->setText(rule.name);
   m_matchClassEdit->setText(rule.matchClass);
-  m_matchTitleEdit->setText(rule.matchTitle);
-  m_matchTitleCheckBox->setChecked(!rule.matchTitle.isEmpty());
+  const bool usesInitialTitle = !rule.matchInitialTitle.isEmpty();
+  m_matchTitleEdit->setText(usesInitialTitle ? rule.matchInitialTitle
+                                             : rule.matchTitle);
+  m_matchInitialTitle = usesInitialTitle;
+  m_matchTitleEdit->setToolTip(usesInitialTitle
+                                   ? "This saved rule uses the initial title."
+                                   : "This saved rule uses the current title.");
   m_floatCheckBox->setChecked(rule.floatEnabled);
 
   QStringList size = rule.size.split(' ', Qt::SkipEmptyParts);
@@ -426,7 +437,7 @@ void MainWindow::populateFormFromRuleSelection() {
   m_opacityCheckBox->setChecked(!opacity.isEmpty());
   m_opacityActiveSpin->setValue(opacity.isEmpty() ? 1.0
                                                   : opacity[0].toDouble());
-  m_opacityInactiveSpin->setValue(opacity.size() > 1 ? opacity[1].toDouble()
+  m_opacityInactiveSpin->setValue(opacity.size() > 1  ? opacity[1].toDouble()
                                   : opacity.isEmpty() ? 0.9
                                                       : opacity[0].toDouble());
   m_populatingForm = false;
@@ -470,8 +481,7 @@ void MainWindow::applySelectedRule() {
                                  .arg(count)
                                  .arg(path, oldPath));
   } else {
-    QMessageBox::critical(this, "Error",
-                          "Failed to write configuration file.");
+    QMessageBox::critical(this, "Error", "Failed to write configuration file.");
   }
 }
 
@@ -480,7 +490,8 @@ void MainWindow::restoreOldConfig() {
   const QString oldPath = backupPath();
 
   if (!QFile::exists(oldPath)) {
-    QMessageBox::warning(this, "No Backup", "No backup file found:\n" + oldPath);
+    QMessageBox::warning(this, "No Backup",
+                         "No backup file found:\n" + oldPath);
     return;
   }
 
@@ -493,8 +504,7 @@ void MainWindow::restoreOldConfig() {
   QProcess::startDetached("hyprctl", QStringList() << "reload");
   closeRuleForm();
   loadRulesFromFile(path);
-  QMessageBox::information(this, "Restored",
-                           "Restored backup to " + path);
+  QMessageBox::information(this, "Restored", "Restored backup to " + path);
 }
 
 void MainWindow::closeRuleForm() {
@@ -510,8 +520,7 @@ void MainWindow::browseConfigFile() {
 
   QString path = QFileDialog::getOpenFileName(
       this, "Select windowrules.lua",
-      QFile::exists(defaultPath) ? defaultPath : startDir,
-      "Lua Files (*.lua)");
+      QFile::exists(defaultPath) ? defaultPath : startDir, "Lua Files (*.lua)");
 
   if (path.isEmpty())
     return;

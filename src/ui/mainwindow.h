@@ -59,6 +59,7 @@ private:
   QDoubleSpinBox *m_opacityInactiveSpin;
 
   bool m_populatingForm = false;
+  bool m_matchInitialTitle = false;
 
   void setupUi();
   void loadRulesFromFile(const QString &path);

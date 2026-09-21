@@ -6,6 +6,7 @@ struct HyprWindow {
   QString address;
   QString wmClass;
   QString title;
+  QString initialTitle;
   int workspaceId;
   bool isFloating;
 };
@@ -14,6 +15,7 @@ struct ExistingRule {
   QString name;
   QString matchClass;
   QString matchTitle;
+  QString matchInitialTitle;
   bool floatEnabled = false;
   QString size;
   QString move;

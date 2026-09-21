@@ -10,9 +10,9 @@
 
 ![Saved Rules tab with the rule editor](assets/screenshot-rules.png)
 
-- **Active Windows** tab lists all open windows via `hyprctl clients`. Selecting one focuses it and pre-fills a rule form with its class and title.
+- **Active Windows** tab lists all open windows via `hyprctl clients`, including current and initial titles. Mozaik automatically uses the initial title when it differs from the current title, so creation-time rules such as size and move apply reliably.
 - **Saved Rules** tab shows every rule parsed from your `windowrules.lua`, editable in place or removable.
-- The rule form supports float, size, move, and opacity (active/inactive) attributes, with class/title regex matching.
+- The rule form supports float, size, move, and opacity (active/inactive) attributes, with class and automatically selected title regex matching.
 - **Apply Rule** rewrites the config file (the previous version is kept as `windowrules_old.lua`) and runs `hyprctl reload`. **Restore Old** swaps the backup back.
 
 ## Requirements
